@@ -57,6 +57,10 @@ foreach i : required_xcb_packages
 	base_deps += [dependency(i, version: '>=1.12.0', required: true)]
 endforeach
 
+if cc.has_function('xcb_picom_peek_message', prefix: '#include <xcb/xcb.h>', dependencies: base_deps)
+	cflags += ['-DHAS_XCB_PICOM_DEBUG_FUNCTIONS']
+endif
+
 libconfig_dep = dependency('libconfig', version: '>=1.7', required: false)
 
 if not libconfig_dep.found()

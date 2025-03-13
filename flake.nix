@@ -26,9 +26,18 @@
         inherit system overlays;
         config.allowBroken = true;
       };
-      profilePkgs = import nixpkgs {
+      debuggablePkgs = import nixpkgs {
         inherit system;
         overlays = overlays ++ [
+          (final: prev: {
+            xorg = prev.xorg.overrideScope (_: xprev: {
+              libxcb = final.enableDebugging (xprev.libxcb.overrideAttrs (o: {
+                patches = (o.patches or []) ++ [
+                  ./nix/patches/xcb-add-debug-functions.patch
+                ];
+              }));
+            });
+          })
           (final: prev: {
             stdenv = prev.withCFlags "-fno-omit-frame-pointer" prev.stdenv;
           })
@@ -75,8 +84,8 @@
       };
       # build picom and all dependencies with frame pointer, making profiling/debugging easier.
       # WARNING! many many rebuilds
-      devShells.useClangProfile = (mkDevShell (profilePkgs.picom.override { devShell = true; })).override {
-        stdenv = profilePkgs.withCFlags "-fno-omit-frame-pointer" profilePkgs.llvmPackages_18.stdenv;
+      devShells.useClangDebuggable = (mkDevShell (debuggablePkgs.picom.override { devShell = true; })).override {
+        stdenv = debuggablePkgs.withCFlags "-fno-omit-frame-pointer" debuggablePkgs.llvmPackages_18.stdenv;
       };
     });
 }

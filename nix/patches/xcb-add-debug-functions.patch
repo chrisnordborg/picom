@@ -1,0 +1,82 @@
+diff --git i/src/xcb.h w/src/xcb.h
+index 8d1b456..f37561d 100644
+--- i/src/xcb.h
++++ w/src/xcb.h
+@@ -386,6 +386,11 @@ xcb_special_event_t *xcb_register_for_special_xge(xcb_connection_t *c,
+ void xcb_unregister_for_special_event(xcb_connection_t *c,
+                                       xcb_special_event_t *se);
+ 
++/**
++ * @brief Returns an arbitrary message from the connection's internal buffer if any.
++ */
++xcb_generic_event_t *xcb_picom_peek_message(xcb_connection_t *c);
++
+ /**
+  * @brief Return the error for a request, or NULL if none can ever arrive.
+  * @param c The connection to the X server.
+diff --git i/src/xcb_in.c w/src/xcb_in.c
+index 62526f6..7c13022 100644
+--- i/src/xcb_in.c
++++ w/src/xcb_in.c
+@@ -25,6 +25,7 @@
+ 
+ /* Stuff that reads stuff from the server. */
+ 
++#include <stdint.h>
+ #ifdef HAVE_CONFIG_H
+ #include "config.h"
+ #endif
+@@ -913,6 +914,25 @@ xcb_unregister_for_special_event(xcb_connection_t *c,
+     pthread_mutex_unlock(&c->iolock);
+ }
+ 
++xcb_generic_event_t *xcb_picom_peek_message(xcb_connection_t *c) {
++    if (c->in.events) {
++        return c->in.events->event;
++    }
++    if (c->in.current_reply) {
++        return c->in.current_reply->reply;
++    }
++    if (_xcb_map_head(c->in.replies)) {
++        struct reply_list *list = _xcb_map_head(c->in.replies);
++        return list->reply;
++    }
++    for (xcb_special_event_t *s, **prev = &c->in.special_events; (s = *prev) != NULL; prev = &(s->next)) {
++        if (s->events) {
++            return s->events->event;
++        }
++    }
++    return NULL;
++}
++
+ /* Private interface */
+ 
+ int _xcb_in_init(_xcb_in *in)
+diff --git i/src/xcb_list.c w/src/xcb_list.c
+index bdd2d43..9dfaaac 100644
+--- i/src/xcb_list.c
++++ w/src/xcb_list.c
+@@ -103,3 +103,11 @@ void *_xcb_map_remove(_xcb_map *list, uint64_t key)
+         }
+     return 0;
+ }
++
++void *_xcb_map_head(_xcb_map *list) {
++    if (!list || !list->head) {
++        return NULL;
++    }
++    return list->head->data;
++}
++
+diff --git i/src/xcbint.h w/src/xcbint.h
+index 9836def..ba2d27c 100644
+--- i/src/xcbint.h
++++ w/src/xcbint.h
+@@ -85,6 +85,7 @@ _xcb_map *_xcb_map_new(void);
+ void _xcb_map_delete(_xcb_map *q, xcb_list_free_func_t do_free);
+ int _xcb_map_put(_xcb_map *q, uint64_t key, void *data);
+ void *_xcb_map_remove(_xcb_map *q, uint64_t key);
++void *_xcb_map_head(_xcb_map *list);
+ 
+ 
+ /* xcb_out.c */

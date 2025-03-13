@@ -1281,6 +1281,28 @@ static void unredirect(session_t *ps) {
 	log_debug("Screen unredirected.");
 }
 
+/// Returns true if there is no queued messages in xcb_connection_t's buffer.
+static bool check_xcb_buffer_is_empty(xcb_connection_t *c) {
+#ifdef HAS_XCB_PICOM_DEBUG_FUNCTIONS
+	xcb_generic_event_t *buffered = xcb_picom_peek_message(c);
+	if (buffered != NULL) {
+		if (buffered->response_type != 1) {
+			// not a reply, full_sequence is valid
+			log_fatal("Going into sleep with messages in connection's "
+			          "buffer, seq: %x",
+			          buffered->full_sequence);
+		} else {
+			log_fatal("Going into sleep with replies in connection's buffer, "
+			          "seq: %x",
+			          buffered->sequence);
+		}
+
+		return false;
+	}
+#endif
+	return true;
+}
+
 /// Handle queued events before we go to sleep.
 ///
 /// This function is called by ev_prepare watcher, which is called just before
@@ -1333,6 +1355,8 @@ static void handle_x_events(struct session *ps) {
 		ps->pending_updates = true;
 		queue_redraw(ps);
 	}
+
+	assert(check_xcb_buffer_is_empty(ps->c.c));
 }
 
 static void handle_x_events_ev(EV_P attr_unused, ev_prepare *w, int revents attr_unused) {
